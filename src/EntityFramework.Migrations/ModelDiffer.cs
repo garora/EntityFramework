@@ -278,27 +278,20 @@ namespace Microsoft.Data.Entity.Migrations
 
         private IReadOnlyList<Tuple<IEntityType, IEntityType>> FindEntityTypePairs()
         {
-            var nameMatchPairs =
+            var simpleMatchPairs =
                 (from et1 in _sourceMapping.Model.EntityTypes
                     from et2 in _targetMapping.Model.EntityTypes
-                    where et1.Name.Equals(et2.Name, StringComparison.Ordinal)
+                    where SimpleMatchEntityTypes(et1, et2)
                     select Tuple.Create(et1, et2))
                     .ToArray();
 
             var fuzzyMatchPairs =
-                from et1 in _sourceMapping.Model.EntityTypes.Except(nameMatchPairs.Select(p => p.Item1))
-                from et2 in _targetMapping.Model.EntityTypes.Except(nameMatchPairs.Select(p => p.Item2))
+                from et1 in _sourceMapping.Model.EntityTypes.Except(simpleMatchPairs.Select(p => p.Item1))
+                from et2 in _targetMapping.Model.EntityTypes.Except(simpleMatchPairs.Select(p => p.Item2))
                 where FuzzyMatchEntityTypes(et1, et2)
                 select Tuple.Create(et1, et2);
 
-            return nameMatchPairs.Concat(fuzzyMatchPairs).ToArray();
-        }
-
-        private static bool FuzzyMatchEntityTypes(IEntityType et1, IEntityType et2)
-        {
-            // TODO: Not implemented. Needs code to compare keys, properties, etc.
-
-            return false;
+            return simpleMatchPairs.Concat(fuzzyMatchPairs).ToArray();
         }
 
         private IReadOnlyList<Tuple<Table, Table>> FindTablePairs(
@@ -394,14 +387,20 @@ namespace Microsoft.Data.Entity.Migrations
         private IReadOnlyList<Tuple<IProperty, IProperty>> FindPropertyPairs(
             Tuple<IEntityType, IEntityType> entitTypePair)
         {
-            // TODO: This should include the case of property being renamed but column being the same.
-
-            return
+            var simpleMatchPairs =
                 (from p1 in entitTypePair.Item1.Properties
                     from p2 in entitTypePair.Item2.Properties
-                    where string.Equals(p1.Name, p2.Name, StringComparison.Ordinal)
+                    where SimpleMatchProperties(p1, p2)
                     select Tuple.Create(p1, p2))
                     .ToArray();
+
+            var fuzzyMatchPairs =
+                from p1 in entitTypePair.Item1.Properties.Except(simpleMatchPairs.Select(p => p.Item1))
+                from p2 in entitTypePair.Item2.Properties.Except(simpleMatchPairs.Select(p => p.Item2))
+                where FuzzyMatchProperties(p1, p2)
+                select Tuple.Create(p1, p2);
+
+            return simpleMatchPairs.Concat(fuzzyMatchPairs).ToArray();
         }
 
         private IReadOnlyList<Tuple<Column, Column>> FindColumnPairs(
@@ -457,10 +456,7 @@ namespace Microsoft.Data.Entity.Migrations
         {
             _operations.AddRange(
                 columnPairs
-                    .Where(pair =>
-                        SameDefault(pair.Item1, pair.Item2)
-                        && (pair.Item1.IsNullable != pair.Item2.IsNullable
-                            || !SameType(pair.Item1, pair.Item2)))
+                    .Where(pair => !MatchColumns(pair.Item1, pair.Item2))
                     .Select(pair =>
                         new AlterColumnOperation(
                             pair.Item2.Table.Name,
@@ -477,7 +473,7 @@ namespace Microsoft.Data.Entity.Migrations
                 columnPairs
                     .Where(pair =>
                         pair.Item2.HasDefault
-                        && !SameDefault(pair.Item1, pair.Item2))
+                        && !MatchColumnDefaults(pair.Item1, pair.Item2))
                     .Select(pair =>
                         new AddDefaultConstraintOperation(
                             pair.Item2.Table.Name,
@@ -493,7 +489,7 @@ namespace Microsoft.Data.Entity.Migrations
                 columnPairs
                     .Where(pair =>
                         pair.Item1.HasDefault
-                        && !SameDefault(pair.Item1, pair.Item2))
+                        && !MatchColumnDefaults(pair.Item1, pair.Item2))
                     .Select(pair =>
                         new DropDefaultConstraintOperation(
                             pair.Item1.Table.Name,
@@ -504,14 +500,7 @@ namespace Microsoft.Data.Entity.Migrations
             IEnumerable<Tuple<IEntityType, IEntityType>> entityTypePairs)
         {
             return entityTypePairs
-                .Where(pair =>
-                    pair.Item1.GetKey() != null
-                    && pair.Item2.GetKey() != null
-                    && pair.Item1.GetKey().IsClustered()
-                    == pair.Item2.GetKey().IsClustered()
-                    && SameNames(
-                        pair.Item1.GetKey().Properties,
-                        pair.Item2.GetKey().Properties))
+                .Where(pair => MatchPrimaryKeys(pair.Item1.GetKey(), pair.Item2.GetKey()))
                 .Select(pair =>
                     Tuple.Create(
                         pair.Item1.GetKey(),
@@ -527,6 +516,7 @@ namespace Microsoft.Data.Entity.Migrations
                     Tuple.Create(
                         _sourceMapping.GetDatabaseObject<PrimaryKey>(pair.Item1),
                         _targetMapping.GetDatabaseObject<PrimaryKey>(pair.Item2)))
+                .Where(pair => MatchPrimaryKeys(pair.Item1, pair.Item2))
                 .ToArray();
         }
 
@@ -570,9 +560,7 @@ namespace Microsoft.Data.Entity.Migrations
             return
                 (from fk1 in entityTypePair.Item1.ForeignKeys
                     from fk2 in entityTypePair.Item2.ForeignKeys
-                    where SameNames(fk1.Properties, fk2.Properties)
-                          && SameNames(fk1.ReferencedProperties, fk2.ReferencedProperties)
-                          && fk1.CascadeDelete() == fk2.CascadeDelete()
+                    where MatchForeignKeys(fk1, fk2)
                     select Tuple.Create(fk1, fk2))
                     .ToArray();
         }
@@ -585,6 +573,7 @@ namespace Microsoft.Data.Entity.Migrations
                     Tuple.Create(
                         _sourceMapping.GetDatabaseObject<ForeignKey>(pair.Item1),
                         _targetMapping.GetDatabaseObject<ForeignKey>(pair.Item2)))
+                .Where(pair => MatchForeignKeys(pair.Item1, pair.Item2))
                 .ToArray();
         }
 
@@ -624,9 +613,7 @@ namespace Microsoft.Data.Entity.Migrations
             return
                 (from ix1 in entityTypePair.Item1.Indexes
                     from ix2 in entityTypePair.Item2.Indexes
-                    where SameNames(ix1.Properties, ix2.Properties)
-                          && ix1.IsUnique == ix2.IsUnique
-                          && ix1.IsClustered() == ix2.IsClustered()
+                    where MatchIndexes(ix1, ix2)
                     select Tuple.Create(ix1, ix2))
                     .ToArray();
         }
@@ -639,6 +626,7 @@ namespace Microsoft.Data.Entity.Migrations
                     Tuple.Create(
                         _sourceMapping.GetDatabaseObject<Index>(pair.Item1),
                         _targetMapping.GetDatabaseObject<Index>(pair.Item2)))
+                .Where(pair => MatchIndexes(pair.Item1, pair.Item2))
                 .ToArray();
         }
 
@@ -685,39 +673,142 @@ namespace Microsoft.Data.Entity.Migrations
                             idx.Name)));
         }
 
-        private static bool SameNames(
-            IReadOnlyList<IProperty> sourceProperties,
-            IReadOnlyList<IProperty> targetProperties)
+        protected virtual bool SimpleMatchEntityTypes(IEntityType x, IEntityType y)
         {
             return
-                sourceProperties.Count == targetProperties.Count
-                && !sourceProperties
-                    .Where((t, i) =>
-                        !string.Equals(
-                            t.Name,
-                            targetProperties[i].Name,
-                            StringComparison.Ordinal))
-                    .Any();
+                string.Equals(x.Name, y.Name, StringComparison.Ordinal);
         }
 
-        private static bool SameDefault(Column sourceColumn, Column targetColumn)
+        protected virtual bool FuzzyMatchEntityTypes(IEntityType x, IEntityType y)
+        {
+            var xKeyProperties = x.GetKey() != null ? x.GetKey().Properties : new Property[0];
+            var yKeyProperties = y.GetKey() != null ? y.GetKey().Properties : new Property[0];
+
+            // The key properties must match.
+            if (!MatchProperties(xKeyProperties, yKeyProperties))
+            {
+                return false;
+            }
+
+            var matchingPropertyCount
+                = (from p1 in x.Properties
+                    from p2 in y.Properties
+                    where MatchProperties(p1, p2)
+                    select 1)
+                    .Count();
+
+            // At least 80% of properties must match across both tables.
+            return (matchingPropertyCount * 2.0f / (x.Properties.Count + y.Properties.Count)) > 0.80;
+        }
+
+        protected virtual bool SimpleMatchProperties(IProperty x, IProperty y)
+        {
+            return
+                string.Equals(x.Name, y.Name, StringComparison.Ordinal);
+        }
+
+        protected virtual bool FuzzyMatchProperties(IProperty x, IProperty y)
+        {
+            var xColumnName = x[MetadataExtensions.Annotations.ColumnName];
+            var yColumnName = y[MetadataExtensions.Annotations.ColumnName];
+
+            return
+                // The associated column names must match.
+                xColumnName != null && yColumnName != null
+                && string.Equals(xColumnName, yColumnName, StringComparison.Ordinal)
+                // The property types must match.
+                && ReferenceEquals(x.PropertyType, y.PropertyType);
+        }
+
+        protected virtual bool MatchProperties(IProperty x, IProperty y)
+        {
+            return
+                string.Equals(x.Name, y.Name, StringComparison.Ordinal)
+                && ReferenceEquals(x.PropertyType, y.PropertyType);
+        }
+
+        protected virtual bool MatchProperties(IReadOnlyList<IProperty> x, IReadOnlyList<IProperty> y)
+        {
+            return
+                x.Count == y.Count
+                && !x.Where((t, i) => !MatchProperties(t, y[i])).Any();
+        }
+
+        protected virtual bool MatchPrimaryKeys(IKey x, IKey y)
+        {
+            return
+                x != null && y != null
+                && MatchProperties(x.Properties, y.Properties);
+        }
+
+        protected virtual bool MatchForeignKeys(IForeignKey x, IForeignKey y)
+        {
+            return
+                x.IsUnique == y.IsUnique
+                && x.IsRequired == y.IsRequired
+                && MatchProperties(x.Properties, y.Properties)
+                && MatchProperties(x.ReferencedProperties, y.ReferencedProperties);
+        }
+
+        protected virtual bool MatchIndexes(IIndex x, IIndex y)
+        {
+            return
+                x.IsUnique == y.IsUnique
+                && MatchProperties(x.Properties, y.Properties);
+        }
+
+        protected virtual bool MatchColumns(Column x, Column y)
+        {
+            // Column defaults are covered separately.
+            return
+                x.ClrType == y.ClrType
+                && string.Equals(x.DataType, y.DataType, StringComparison.Ordinal)
+                && x.IsNullable == y.IsNullable
+                && x.ValueGenerationStrategy == y.ValueGenerationStrategy
+                && x.IsTimestamp == y.IsTimestamp
+                && x.MaxLength == y.MaxLength
+                && x.Precision == y.Precision
+                && x.Scale == y.Scale
+                && x.IsFixedLength == y.IsFixedLength
+                && x.IsUnicode == y.IsUnicode;
+        }
+
+        protected virtual bool MatchColumns(IReadOnlyList<Column> x, IReadOnlyList<Column> y)
+        {
+            return
+                x.Count == y.Count
+                && !x.Where((t, i) => !MatchColumns(t, y[i])).Any();            
+        }
+
+        protected virtual bool MatchColumnDefaults(Column sourceColumn, Column targetColumn)
         {
             return
                 sourceColumn.DefaultValue == targetColumn.DefaultValue
-                && string.Equals(
-                    sourceColumn.DefaultSql,
-                    targetColumn.DefaultSql,
-                    StringComparison.Ordinal);
+                && string.Equals(sourceColumn.DefaultSql, targetColumn.DefaultSql, StringComparison.Ordinal);
         }
 
-        private static bool SameType(Column sourceColumn, Column targetColumn)
+        protected virtual bool MatchPrimaryKeys(PrimaryKey x, PrimaryKey y)
         {
             return
-                sourceColumn.ClrType == targetColumn.ClrType
-                && string.Equals(
-                    sourceColumn.DataType,
-                    targetColumn.DataType,
-                    StringComparison.Ordinal);
+                string.Equals(x.Name, y.Name, StringComparison.Ordinal)
+                && x.IsClustered == y.IsClustered
+                && MatchColumns(x.Columns, y.Columns);
+        }
+
+        protected virtual bool MatchForeignKeys(ForeignKey x, ForeignKey y)
+        {
+            return
+                string.Equals(x.Name, y.Name, StringComparison.Ordinal)
+                && x.CascadeDelete == y.CascadeDelete
+                && MatchColumns(x.Columns, y.Columns)
+                && MatchColumns(x.ReferencedColumns, y.ReferencedColumns);
+        }
+
+        protected virtual bool MatchIndexes(Index x, Index y)
+        {
+            return
+                x.IsClustered == y.IsClustered                
+                && MatchColumns(x.Columns, y.Columns);
         }
 
         private class MigrationOperationCollection
