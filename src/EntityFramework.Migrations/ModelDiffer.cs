@@ -681,15 +681,6 @@ namespace Microsoft.Data.Entity.Migrations
 
         protected virtual bool FuzzyMatchEntityTypes(IEntityType x, IEntityType y)
         {
-            var xKeyProperties = x.GetKey() != null ? x.GetKey().Properties : new Property[0];
-            var yKeyProperties = y.GetKey() != null ? y.GetKey().Properties : new Property[0];
-
-            // The key properties must match.
-            if (!MatchProperties(xKeyProperties, yKeyProperties))
-            {
-                return false;
-            }
-
             var matchingPropertyCount
                 = (from p1 in x.Properties
                     from p2 in y.Properties
@@ -697,8 +688,8 @@ namespace Microsoft.Data.Entity.Migrations
                     select 1)
                     .Count();
 
-            // At least 80% of properties must match across both tables.
-            return (matchingPropertyCount * 2.0f / (x.Properties.Count + y.Properties.Count)) > 0.80;
+            // At least 80% of properties must match across both entities.
+            return (matchingPropertyCount * 2.0f / (x.Properties.Count + y.Properties.Count)) >= 0.80;
         }
 
         protected virtual bool SimpleMatchProperties(IProperty x, IProperty y)

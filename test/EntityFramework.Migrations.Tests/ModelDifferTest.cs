@@ -661,9 +661,745 @@ namespace Microsoft.Data.Entity.Migrations.Tests
             Assert.Equal("IX2", renameIndexOperation2.NewIndexName);
         }
 
+        #region EntityType matching
+
+        [Fact]
+        public void Entity_types_are_fuzzy_matched()
+        {
+            var sourceModelBuilder = new ModelBuilder();
+            sourceModelBuilder
+                .Entity("A")
+                .Properties(
+                    ps =>
+                        {
+                            ps.Property<int>("Id");
+                            ps.Property<string>("P1");
+                        })
+                .Key("Id");
+            sourceModelBuilder.Model.GetEntityType("A").GetKey().SetKeyName("PK");
+
+            var targetModelBuilder = new ModelBuilder();
+            targetModelBuilder
+                .Entity("B")
+                .Properties(
+                    ps =>
+                    {
+                        ps.Property<int>("Id");
+                        ps.Property<string>("P1");
+                        ps.Property<string>("P2");
+                    })
+                .Key("Id");
+            targetModelBuilder.Model.GetEntityType("B").GetKey().SetKeyName("PK");
+
+            var operations = new ModelDiffer(new DatabaseBuilder()).Diff(
+                sourceModelBuilder.Model, targetModelBuilder.Model);
+
+            Assert.Equal(2, operations.Count);
+
+            Assert.IsType<RenameTableOperation>(operations[0]);
+            Assert.IsType<AddColumnOperation>(operations[1]);
+
+            var renameTableOperation = (RenameTableOperation)operations[0];
+            var addColumnOperation = (AddColumnOperation)operations[1];
+
+            Assert.Equal("A", renameTableOperation.TableName);
+            Assert.Equal("B", renameTableOperation.NewTableName);
+            Assert.Equal("P2", addColumnOperation.Column.Name);
+        }
+
+        [Fact]
+        public void Entity_types_are_not_fuzzy_matched_if_less_than_80_percent_of_properties_match()
+        {
+            var sourceModelBuilder = new ModelBuilder();
+            sourceModelBuilder
+                .Entity("A")
+                .Properties(
+                    ps =>
+                    {
+                        ps.Property<int>("Id");
+                        ps.Property<string>("P1");
+                        ps.Property<string>("P2");
+                    })
+                .Key("Id");
+            sourceModelBuilder.Model.GetEntityType("A").GetKey().SetKeyName("PK");
+
+            var targetModelBuilder = new ModelBuilder();
+            targetModelBuilder
+                .Entity("B")
+                .Properties(
+                    ps =>
+                    {
+                        ps.Property<int>("Id");
+                        ps.Property<string>("P1");
+                        ps.Property<string>("P3");
+                    })
+                .Key("Id");
+            targetModelBuilder.Model.GetEntityType("B").GetKey().SetKeyName("PK");
+
+            var operations = new ModelDiffer(new DatabaseBuilder()).Diff(
+                sourceModelBuilder.Model, targetModelBuilder.Model);
+
+            Assert.Equal(2, operations.Count);
+
+            Assert.IsType<DropTableOperation>(operations[0]);
+            Assert.IsType<CreateTableOperation>(operations[1]);
+        }
+
+        #endregion
+
+        #region Property matching
+
+        [Fact]
+        public void Properties_are_fuzzy_matched()
+        {
+            var sourceModelBuilder = new ModelBuilder();
+            sourceModelBuilder
+                .Entity("A")
+                .Properties(
+                    ps =>
+                    {
+                        ps.Property<int>("Id");
+                        ps.Property<string>("P1").ColumnName("C");
+                    })
+                .Key("Id");
+
+            var targetModelBuilder = new ModelBuilder();
+            targetModelBuilder
+                .Entity("A")
+                .Properties(
+                    ps =>
+                    {
+                        ps.Property<int>("Id");
+                        ps.Property<string>("P2").ColumnName("C");
+                    })
+                .Key("Id");
+
+            var operations = new ModelDiffer(new DatabaseBuilder()).Diff(
+                sourceModelBuilder.Model, targetModelBuilder.Model);
+
+            Assert.Equal(0, operations.Count);
+        }
+
+        [Fact]
+        public void Properties_are_not_fuzzy_matched_if_different_column_names()
+        {
+            var sourceModelBuilder = new ModelBuilder();
+            sourceModelBuilder
+                .Entity("A")
+                .Properties(
+                    ps =>
+                    {
+                        ps.Property<int>("Id");
+                        ps.Property<string>("P1").ColumnName("C1");
+                    })
+                .Key("Id");
+
+            var targetModelBuilder = new ModelBuilder();
+            targetModelBuilder
+                .Entity("A")
+                .Properties(
+                    ps =>
+                    {
+                        ps.Property<int>("Id");
+                        ps.Property<string>("P2").ColumnName("C2");
+                    })
+                .Key("Id");
+
+            var operations = new ModelDiffer(new DatabaseBuilder()).Diff(
+                sourceModelBuilder.Model, targetModelBuilder.Model);
+
+            Assert.Equal(2, operations.Count);
+
+            Assert.IsType<DropColumnOperation>(operations[0]);
+            Assert.IsType<AddColumnOperation>(operations[1]);
+        }
+
+        [Fact]
+        public void Properties_are_not_fuzzy_matched_if_different_property_types()
+        {
+            var sourceModelBuilder = new ModelBuilder();
+            sourceModelBuilder
+                .Entity("A")
+                .Properties(
+                    ps =>
+                    {
+                        ps.Property<int>("Id");
+                        ps.Property<string>("P1").ColumnName("C");
+                    })
+                .Key("Id");
+
+            var targetModelBuilder = new ModelBuilder();
+            targetModelBuilder
+                .Entity("A")
+                .Properties(
+                    ps =>
+                    {
+                        ps.Property<int>("Id");
+                        ps.Property<int>("P2").ColumnName("C");
+                    })
+                .Key("Id");
+
+            var operations = new ModelDiffer(new DatabaseBuilder()).Diff(
+                sourceModelBuilder.Model, targetModelBuilder.Model);
+
+            Assert.Equal(2, operations.Count);
+
+            Assert.IsType<DropColumnOperation>(operations[0]);
+            Assert.IsType<AddColumnOperation>(operations[1]);
+        }
+
+        #endregion
+
+        #region PrimaryKey matching
+
+        [Fact]
+        public void Primary_keys_are_not_matched_if_different_property_count()
+        {
+            var sourceModelBuilder = new ModelBuilder();
+            sourceModelBuilder
+                .Entity("A")
+                .Properties(
+                    ps =>
+                    {
+                        ps.Property<int>("Id");
+                        ps.Property<string>("P1");
+                    })
+                .Key("Id", "P1");
+
+            var targetModelBuilder = new ModelBuilder();
+            targetModelBuilder
+                .Entity("A")
+                .Properties(
+                    ps =>
+                    {
+                        ps.Property<int>("Id");
+                        ps.Property<string>("P1");
+                    })
+                .Key("Id");
+
+            var operations = new ModelDiffer(new DatabaseBuilder()).Diff(
+                sourceModelBuilder.Model, targetModelBuilder.Model);
+
+            Assert.Equal(2, operations.Count);
+
+            Assert.IsType<DropPrimaryKeyOperation>(operations[0]);
+            Assert.IsType<AddPrimaryKeyOperation>(operations[1]);
+
+            var dropPrimaryKeyOperation = (DropPrimaryKeyOperation)operations[0];
+            var addPrimaryKeyOperation = (AddPrimaryKeyOperation)operations[1];
+
+            Assert.Equal("PK_A", dropPrimaryKeyOperation.PrimaryKeyName);
+            Assert.Equal("PK_A", addPrimaryKeyOperation.PrimaryKeyName);
+            Assert.Equal(new[] { "Id" }, addPrimaryKeyOperation.ColumnNames);
+        }
+
+        [Fact]
+        public void Primary_keys_are_not_matched_if_different_property_names()
+        {
+            var sourceModelBuilder = new ModelBuilder();
+            sourceModelBuilder
+                .Entity("A")
+                .Properties(
+                    ps =>
+                    {
+                        ps.Property<int>("Id");
+                        ps.Property<string>("P1");
+                        ps.Property<string>("P2");
+                    })
+                .Key("Id", "P1");
+
+            var targetModelBuilder = new ModelBuilder();
+            targetModelBuilder
+                .Entity("A")
+                .Properties(
+                    ps =>
+                    {
+                        ps.Property<int>("Id");
+                        ps.Property<string>("P1");
+                        ps.Property<string>("P2");
+                    })
+                .Key("Id", "P2");
+
+            var operations = new ModelDiffer(new DatabaseBuilder()).Diff(
+                sourceModelBuilder.Model, targetModelBuilder.Model);
+
+            Assert.Equal(2, operations.Count);
+
+            Assert.IsType<DropPrimaryKeyOperation>(operations[0]);
+            Assert.IsType<AddPrimaryKeyOperation>(operations[1]);
+
+            var dropPrimaryKeyOperation = (DropPrimaryKeyOperation)operations[0];
+            var addPrimaryKeyOperation = (AddPrimaryKeyOperation)operations[1];
+
+            Assert.Equal("PK_A", dropPrimaryKeyOperation.PrimaryKeyName);
+            Assert.Equal("PK_A", addPrimaryKeyOperation.PrimaryKeyName);
+            Assert.Equal(new[] { "Id", "P2" }, addPrimaryKeyOperation.ColumnNames);
+        }
+
+        [Fact]
+        public void Primary_keys_are_not_matched_if_different_property_types()
+        {
+            var sourceModelBuilder = new ModelBuilder();
+            sourceModelBuilder
+                .Entity("A")
+                .Properties(
+                    ps =>
+                    {
+                        ps.Property<int>("Id");
+                        ps.Property<int>("P1");
+                    })
+                .Key("Id", "P1");
+
+            var targetModelBuilder = new ModelBuilder();
+            targetModelBuilder
+                .Entity("A")
+                .Properties(
+                    ps =>
+                    {
+                        ps.Property<int>("Id");
+                        ps.Property<string>("P1");
+                    })
+                .Key("Id", "P1");
+
+            var operations = new ModelDiffer(new DatabaseBuilder()).Diff(
+                sourceModelBuilder.Model, targetModelBuilder.Model);
+
+            Assert.Equal(3, operations.Count);
+
+            Assert.IsType<DropPrimaryKeyOperation>(operations[0]);
+            Assert.IsType<AlterColumnOperation>(operations[1]);
+            Assert.IsType<AddPrimaryKeyOperation>(operations[2]);
+
+            var dropPrimaryKeyOperation = (DropPrimaryKeyOperation)operations[0];
+            var alterColumnOperation = (AlterColumnOperation)operations[1];
+            var addPrimaryKeyOperation = (AddPrimaryKeyOperation)operations[2];
+
+            Assert.Equal("PK_A", dropPrimaryKeyOperation.PrimaryKeyName);
+            Assert.Equal("P1", alterColumnOperation.NewColumn.Name);
+            Assert.Same(typeof(string), alterColumnOperation.NewColumn.ClrType);
+            Assert.Equal("PK_A", addPrimaryKeyOperation.PrimaryKeyName);
+            Assert.Equal(new[] { "Id", "P1" }, addPrimaryKeyOperation.ColumnNames);
+        }
+
+        [Fact]
+        public void Primary_keys_are_not_matched_if_different_key_names()
+        {
+            var sourceModelBuilder = new ModelBuilder();
+            sourceModelBuilder
+                .Entity("A")
+                .Properties(ps => ps.Property<int>("Id"))
+                .Key("Id");
+            sourceModelBuilder.Model.GetEntityType("A").GetKey().SetKeyName("PK1");
+
+            var targetModelBuilder = new ModelBuilder();
+            targetModelBuilder
+                .Entity("A")
+                .Properties(ps => ps.Property<int>("Id"))
+                .Key("Id");
+            targetModelBuilder.Model.GetEntityType("A").GetKey().SetKeyName("PK2");
+
+            var operations = new ModelDiffer(new DatabaseBuilder()).Diff(
+                sourceModelBuilder.Model, targetModelBuilder.Model);
+
+            Assert.Equal(2, operations.Count);
+
+            Assert.IsType<DropPrimaryKeyOperation>(operations[0]);
+            Assert.IsType<AddPrimaryKeyOperation>(operations[1]);
+
+            var dropPrimaryKeyOperation = (DropPrimaryKeyOperation)operations[0];
+            var addPrimaryKeyOperation = (AddPrimaryKeyOperation)operations[1];
+
+            Assert.Equal("PK1", dropPrimaryKeyOperation.PrimaryKeyName);
+            Assert.Equal("PK2", addPrimaryKeyOperation.PrimaryKeyName);
+        }
+
+        [Fact]
+        public void Primary_keys_are_not_matched_if_different_clustered_flag()
+        {
+            var sourceModelBuilder = new ModelBuilder();
+            sourceModelBuilder
+                .Entity("A")
+                .Properties(ps => ps.Property<int>("Id"))
+                .Key("Id");
+            sourceModelBuilder.Model.GetEntityType("A").GetKey()[MetadataExtensions.Annotations.IsClustered] = "true";
+
+            var targetModelBuilder = new ModelBuilder();
+            targetModelBuilder
+                .Entity("A")
+                .Properties(ps => ps.Property<int>("Id"))
+                .Key("Id");
+            targetModelBuilder.Model.GetEntityType("A").GetKey()[MetadataExtensions.Annotations.IsClustered] = "false";
+
+            var operations = new ModelDiffer(new DatabaseBuilder()).Diff(
+                sourceModelBuilder.Model, targetModelBuilder.Model);
+
+            Assert.Equal(2, operations.Count);
+
+            Assert.IsType<DropPrimaryKeyOperation>(operations[0]);
+            Assert.IsType<AddPrimaryKeyOperation>(operations[1]);
+
+            var dropPrimaryKeyOperation = (DropPrimaryKeyOperation)operations[0];
+            var addPrimaryKeyOperation = (AddPrimaryKeyOperation)operations[1];
+
+            Assert.Equal("PK_A", dropPrimaryKeyOperation.PrimaryKeyName);
+            Assert.Equal("PK_A", addPrimaryKeyOperation.PrimaryKeyName);
+            Assert.False(addPrimaryKeyOperation.IsClustered);
+        }
+
+        [Fact]
+        public void Primary_keys_are_not_matched_if_different_column_types()
+        {
+            var sourceModelBuilder = new ModelBuilder();
+            sourceModelBuilder
+                .Entity("A")
+                .Properties(
+                    ps =>
+                    {
+                        ps.Property<int>("Id");
+                        ps.Property<string>("P1").ColumnType("varchar");
+                    })
+                .Key("Id", "P1");
+
+            var targetModelBuilder = new ModelBuilder();
+            targetModelBuilder
+                .Entity("A")
+                .Properties(
+                    ps =>
+                    {
+                        ps.Property<int>("Id");
+                        ps.Property<string>("P1").ColumnType("nvarchar");
+                    })
+                .Key("Id", "P1");
+
+            var operations = new ModelDiffer(new DatabaseBuilder()).Diff(
+                sourceModelBuilder.Model, targetModelBuilder.Model);
+
+            Assert.Equal(3, operations.Count);
+
+            Assert.IsType<DropPrimaryKeyOperation>(operations[0]);
+            Assert.IsType<AlterColumnOperation>(operations[1]);
+            Assert.IsType<AddPrimaryKeyOperation>(operations[2]);
+
+            var dropPrimaryKeyOperation = (DropPrimaryKeyOperation)operations[0];
+            var alterColumnOperation = (AlterColumnOperation)operations[1];
+            var addPrimaryKeyOperation = (AddPrimaryKeyOperation)operations[2];
+
+            Assert.Equal("PK_A", dropPrimaryKeyOperation.PrimaryKeyName);
+            Assert.Equal("nvarchar", alterColumnOperation.NewColumn.DataType);
+            Assert.Equal("PK_A", addPrimaryKeyOperation.PrimaryKeyName);
+        }
+
+        #endregion
+
+        #region Index matching
+
+        [Fact]
+        public void Indexes_are_not_matched_if_different_property_count()
+        {
+            var sourceModelBuilder = new ModelBuilder();
+            sourceModelBuilder
+                .Entity("A")
+                .Properties(
+                    ps =>
+                    {
+                        ps.Property<int>("Id");
+                        ps.Property<string>("P1");
+                    })
+                .Key("Id")
+                .Indexes(ixs => ixs.Index("Id"));
+
+            var targetModelBuilder = new ModelBuilder();
+            targetModelBuilder
+                .Entity("A")
+                .Properties(
+                    ps =>
+                    {
+                        ps.Property<int>("Id");
+                        ps.Property<string>("P1");
+                    })
+                .Key("Id")
+                .Indexes(ixs => ixs.Index("Id", "P1"));
+
+            var operations = new ModelDiffer(new DatabaseBuilder()).Diff(
+                sourceModelBuilder.Model, targetModelBuilder.Model);
+
+            Assert.Equal(2, operations.Count);
+
+            Assert.IsType<DropIndexOperation>(operations[0]);
+            Assert.IsType<CreateIndexOperation>(operations[1]);
+
+            var dropIndexOperation = (DropIndexOperation)operations[0];
+            var createIndexOperation = (CreateIndexOperation)operations[1];
+
+            Assert.Equal("IX_A_Id", dropIndexOperation.IndexName);
+            Assert.Equal("IX_A_Id_P1", createIndexOperation.IndexName);
+        }
+
+        [Fact]
+        public void Indexes_are_not_matched_if_different_property_names()
+        {
+            var sourceModelBuilder = new ModelBuilder();
+            sourceModelBuilder
+                .Entity("A")
+                .Properties(
+                    ps =>
+                    {
+                        ps.Property<int>("Id");
+                        ps.Property<string>("P1");
+                        ps.Property<string>("P2");
+                    })
+                .Key("Id")
+                .Indexes(ixs => ixs.Index("P1"));
+
+            var targetModelBuilder = new ModelBuilder();
+            targetModelBuilder
+                .Entity("A")
+                .Properties(
+                    ps =>
+                    {
+                        ps.Property<int>("Id");
+                        ps.Property<string>("P1");
+                        ps.Property<string>("P2");
+                    })
+                .Key("Id")
+                .Indexes(ixs => ixs.Index("P2"));
+
+            var operations = new ModelDiffer(new DatabaseBuilder()).Diff(
+                sourceModelBuilder.Model, targetModelBuilder.Model);
+
+            Assert.Equal(2, operations.Count);
+
+            Assert.IsType<DropIndexOperation>(operations[0]);
+            Assert.IsType<CreateIndexOperation>(operations[1]);
+
+            var dropIndexOperation = (DropIndexOperation)operations[0];
+            var createIndexOperation = (CreateIndexOperation)operations[1];
+
+            Assert.Equal("IX_A_P1", dropIndexOperation.IndexName);
+            Assert.Equal("IX_A_P2", createIndexOperation.IndexName);
+        }
+
+        [Fact]
+        public void Indexes_are_not_matched_if_different_property_types()
+        {
+            var sourceModelBuilder = new ModelBuilder();
+            sourceModelBuilder
+                .Entity("A")
+                .Properties(
+                    ps =>
+                    {
+                        ps.Property<int>("Id");
+                        ps.Property<string>("P1");
+                    })
+                .Key("Id")
+                .Indexes(ixs => ixs.Index("P1"));
+
+            var targetModelBuilder = new ModelBuilder();
+            targetModelBuilder
+                .Entity("A")
+                .Properties(
+                    ps =>
+                    {
+                        ps.Property<int>("Id");
+                        ps.Property<int>("P1");
+                    })
+                .Key("Id")
+                .Indexes(ixs => ixs.Index("P1"));
+
+            var operations = new ModelDiffer(new DatabaseBuilder()).Diff(
+                sourceModelBuilder.Model, targetModelBuilder.Model);
+
+            Assert.Equal(3, operations.Count);
+
+            Assert.IsType<DropIndexOperation>(operations[0]);
+            Assert.IsType<AlterColumnOperation>(operations[1]);
+            Assert.IsType<CreateIndexOperation>(operations[2]);
+
+            var dropIndexOperation = (DropIndexOperation)operations[0];
+            var alterColumnOperation = (AlterColumnOperation)operations[1];
+            var createIndexOperation = (CreateIndexOperation)operations[2];
+
+            Assert.Equal("IX_A_P1", dropIndexOperation.IndexName);
+            Assert.Same(typeof(int), alterColumnOperation.NewColumn.ClrType);
+            Assert.Equal("IX_A_P1", createIndexOperation.IndexName);
+        }
+
+        [Fact]
+        public void Indexes_are_not_matched_if_different_unique_flag()
+        {
+            var sourceModelBuilder = new ModelBuilder();
+            sourceModelBuilder
+                .Entity("A")
+                .Properties(
+                    ps =>
+                    {
+                        ps.Property<int>("Id");
+                        ps.Property<string>("P1");
+                    })
+                .Key("Id")
+                .Indexes(ixs => ixs.Index("P1"));
+
+            var targetModelBuilder = new ModelBuilder();
+            targetModelBuilder
+                .Entity("A")
+                .Properties(
+                    ps =>
+                    {
+                        ps.Property<int>("Id");
+                        ps.Property<string>("P1");
+                    })
+                .Key("Id")
+                .Indexes(ixs => ixs.Index("P1").IsUnique());
+
+            var operations = new ModelDiffer(new DatabaseBuilder()).Diff(
+                sourceModelBuilder.Model, targetModelBuilder.Model);
+
+            Assert.Equal(2, operations.Count);
+
+            Assert.IsType<DropIndexOperation>(operations[0]);
+            Assert.IsType<CreateIndexOperation>(operations[1]);
+
+            var dropIndexOperation = (DropIndexOperation)operations[0];
+            var createIndexOperation = (CreateIndexOperation)operations[1];
+
+            Assert.Equal("IX_A_P1", dropIndexOperation.IndexName);
+            Assert.Equal("IX_A_P1", createIndexOperation.IndexName);
+            Assert.True(createIndexOperation.IsUnique);
+        }
+
+        [Fact]
+        public void Indexes_are_matched_if_different_names()
+        {
+            var sourceModelBuilder = new ModelBuilder();
+            sourceModelBuilder
+                .Entity("A")
+                .Properties(
+                    ps =>
+                    {
+                        ps.Property<int>("Id");
+                        ps.Property<string>("P1");
+                    })
+                .Key("Id")
+                .Indexes(ixs => ixs.Index("P1").IndexName("IX1"));
+
+            var targetModelBuilder = new ModelBuilder();
+            targetModelBuilder
+                .Entity("A")
+                .Properties(
+                    ps =>
+                    {
+                        ps.Property<int>("Id");
+                        ps.Property<string>("P1");
+                    })
+                .Key("Id")
+                .Indexes(ixs => ixs.Index("P1").IndexName("IX2"));
+
+            var operations = new ModelDiffer(new DatabaseBuilder()).Diff(
+                sourceModelBuilder.Model, targetModelBuilder.Model);
+
+            Assert.Equal(1, operations.Count);
+
+            Assert.IsType<RenameIndexOperation>(operations[0]);
+
+            var renameIndexOperation = (RenameIndexOperation)operations[0];
+
+            Assert.Equal("IX1", renameIndexOperation.IndexName);
+            Assert.Equal("IX2", renameIndexOperation.NewIndexName);
+        }
+
+        [Fact]
+        public void Indexes_are_not_matched_if_different_clustered_flag()
+        {
+            var sourceModelBuilder = new ModelBuilder();
+            sourceModelBuilder
+                .Entity("A")
+                .Properties(
+                    ps =>
+                    {
+                        ps.Property<int>("Id");
+                        ps.Property<string>("P1");
+                    })
+                .Key("Id")
+                .Indexes(ixs => ixs.Index("P1").IsClustered(false));
+
+            var targetModelBuilder = new ModelBuilder();
+            targetModelBuilder
+                .Entity("A")
+                .Properties(
+                    ps =>
+                    {
+                        ps.Property<int>("Id");
+                        ps.Property<string>("P1");
+                    })
+                .Key("Id")
+                .Indexes(ixs => ixs.Index("P1").IsClustered(true));
+
+            var operations = new ModelDiffer(new DatabaseBuilder()).Diff(
+                sourceModelBuilder.Model, targetModelBuilder.Model);
+
+            Assert.Equal(2, operations.Count);
+
+            Assert.IsType<DropIndexOperation>(operations[0]);
+            Assert.IsType<CreateIndexOperation>(operations[1]);
+
+            var dropIndexOperation = (DropIndexOperation)operations[0];
+            var createIndexOperation = (CreateIndexOperation)operations[1];
+
+            Assert.Equal("IX_A_P1", dropIndexOperation.IndexName);
+            Assert.Equal("IX_A_P1", createIndexOperation.IndexName);
+            Assert.True(createIndexOperation.IsClustered);
+        }
+
+        [Fact]
+        public void Indexes_are_not_matched_if_different_column_types()
+        {
+            var sourceModelBuilder = new ModelBuilder();
+            sourceModelBuilder
+                .Entity("A")
+                .Properties(
+                    ps =>
+                    {
+                        ps.Property<int>("Id");
+                        ps.Property<string>("P1").ColumnType("varchar");
+                    })
+                .Key("Id")
+                .Indexes(ixs => ixs.Index("P1"));
+
+            var targetModelBuilder = new ModelBuilder();
+            targetModelBuilder
+                .Entity("A")
+                .Properties(
+                    ps =>
+                    {
+                        ps.Property<int>("Id");
+                        ps.Property<string>("P1").ColumnType("nvarchar");
+                    })
+                .Key("Id")
+                .Indexes(ixs => ixs.Index("P1"));
+
+            var operations = new ModelDiffer(new DatabaseBuilder()).Diff(
+                sourceModelBuilder.Model, targetModelBuilder.Model);
+
+            Assert.Equal(3, operations.Count);
+
+            Assert.IsType<DropIndexOperation>(operations[0]);
+            Assert.IsType<AlterColumnOperation>(operations[1]);
+            Assert.IsType<CreateIndexOperation>(operations[2]);
+
+            var dropIndexOperation = (DropIndexOperation)operations[0];
+            var alterColumnOperation = (AlterColumnOperation)operations[1];
+            var createIndexOperation = (CreateIndexOperation)operations[2];
+
+            Assert.Equal("IX_A_P1", dropIndexOperation.IndexName);
+            Assert.Equal("nvarchar", alterColumnOperation.NewColumn.DataType);
+            Assert.Equal("IX_A_P1", createIndexOperation.IndexName);
+        }
+
+        #endregion
+
         private static Metadata.Model CreateModel()
         {
-            var model = new Metadata.Model() { StorageName = "MyDatabase" };
+            var model = new Metadata.Model { StorageName = "MyDatabase" };
 
             var dependentEntityType = new EntityType("Dependent");
             dependentEntityType.SetTableName("MyTable0");
