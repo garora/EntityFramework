@@ -25,7 +25,8 @@ namespace Microsoft.Data.Entity.Migrations
         internal const string DateTimeFormat = "yyyy-MM-ddTHH:mm:ss.fffK";
         internal const string DateTimeOffsetFormat = "yyyy-MM-ddTHH:mm:ss.fffzzz";
 
-        private DatabaseModel _database;
+        private DatabaseModel _sourceDatabase;
+        private DatabaseModel _targetDatabase;
         private readonly RelationalTypeMapper _typeMapper;
 
         protected MigrationOperationSqlGenerator([NotNull] RelationalTypeMapper typeMapper)
@@ -35,16 +36,29 @@ namespace Microsoft.Data.Entity.Migrations
             _typeMapper = typeMapper;
         }
 
-        public virtual DatabaseModel Database
+        public virtual DatabaseModel SourceDatabase
         {
-            get { return _database; }
+            get { return _sourceDatabase; }
 
             [param: NotNull]
             set
             {
                 Check.NotNull(value, "value");
 
-                _database = value;
+                _sourceDatabase = value;
+            }
+        }
+
+        public virtual DatabaseModel TargetDatabase
+        {
+            get { return _targetDatabase; }
+
+            [param: NotNull]
+            set
+            {
+                Check.NotNull(value, "value");
+
+                _targetDatabase = value;
             }
         }
 
@@ -341,9 +355,9 @@ namespace Microsoft.Data.Entity.Migrations
             }
 
             var isKey = false;
-            if (Database != null)
+            if (TargetDatabase != null)
             {
-                var table = Database.GetTable(tableName);
+                var table = TargetDatabase.GetTable(tableName);
                 isKey = table.PrimaryKey != null
                         && table.PrimaryKey.Columns.Contains(column)
                         || table.ForeignKeys.SelectMany(k => k.Columns).Contains(column);

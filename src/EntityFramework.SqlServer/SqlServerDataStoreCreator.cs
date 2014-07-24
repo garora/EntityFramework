@@ -10,6 +10,7 @@ using Microsoft.Data.Entity.Metadata;
 using Microsoft.Data.Entity.Migrations;
 using Microsoft.Data.Entity.Migrations.Model;
 using Microsoft.Data.Entity.Relational;
+using Microsoft.Data.Entity.Relational.Model;
 using Microsoft.Data.Entity.SqlServer.Utilities;
 
 namespace Microsoft.Data.Entity.SqlServer
@@ -82,7 +83,8 @@ namespace Microsoft.Data.Entity.SqlServer
 
         private IEnumerable<SqlStatement> CreateSchemaCommands(IModel model)
         {
-            _sqlGenerator.Database = _modelDiffer.DatabaseBuilder.GetDatabase(model);
+            _sqlGenerator.SourceDatabase = new DatabaseModel();
+            _sqlGenerator.TargetDatabase = _modelDiffer.DatabaseBuilder.GetDatabase(model);
             return _sqlGenerator.Generate(_modelDiffer.CreateSchema(model));
         }
 

@@ -162,7 +162,10 @@ namespace Microsoft.Data.Entity.Migrations.Tests.Infrastructure
                     },
                 new[]
                     {
-                        new MigrationMetadata("000000000000001_Migration1"),
+                        new MigrationMetadata("000000000000001_Migration1")
+                            {
+                                TargetModel = new Metadata.Model()
+                            },
                         new MigrationMetadata("000000000000002_Migration2")
                             {
                                 TargetModel = new Metadata.Model(),
@@ -195,8 +198,14 @@ namespace Microsoft.Data.Entity.Migrations.Tests.Infrastructure
                     },
                 new[]
                     {
-                        new MigrationMetadata("000000000000001_Migration1"),
-                        new MigrationMetadata("000000000000002_Migration2"),
+                        new MigrationMetadata("000000000000001_Migration1")
+                            {
+                                TargetModel = new Metadata.Model()
+                            },
+                        new MigrationMetadata("000000000000002_Migration2")
+                            {
+                                TargetModel = new Metadata.Model()
+                            },
                         new MigrationMetadata("000000000000003_Migration3")
                             {
                                 TargetModel = new Metadata.Model(),
@@ -240,8 +249,14 @@ namespace Microsoft.Data.Entity.Migrations.Tests.Infrastructure
                     },
                 new[]
                     {
-                        new MigrationMetadata("000000000000001_Migration1"),
-                        new MigrationMetadata("000000000000002_Migration2"),
+                        new MigrationMetadata("000000000000001_Migration1")
+                            {
+                                TargetModel = new Metadata.Model()
+                            },
+                        new MigrationMetadata("000000000000002_Migration2")
+                            {
+                                TargetModel = new Metadata.Model()
+                            },
                         new MigrationMetadata("000000000000003_Migration3")
                             {
                                 TargetModel = new Metadata.Model(),
@@ -285,8 +300,14 @@ namespace Microsoft.Data.Entity.Migrations.Tests.Infrastructure
                     },
                 new[]
                     {
-                        new MigrationMetadata("000000000000001_Migration1"),
-                        new MigrationMetadata("000000000000002_Migration2"),
+                        new MigrationMetadata("000000000000001_Migration1")
+                            {
+                                TargetModel = new Metadata.Model()
+                            },
+                        new MigrationMetadata("000000000000002_Migration2")
+                            {
+                                TargetModel = new Metadata.Model()
+                            },
                         new MigrationMetadata("000000000000003_Migration3")
                             {
                                 TargetModel = new Metadata.Model(),
@@ -354,8 +375,14 @@ namespace Microsoft.Data.Entity.Migrations.Tests.Infrastructure
                     },
                 new[]
                     {
-                        new MigrationMetadata("000000000000001_Migration1"),
-                        new MigrationMetadata("000000000000002_Migration2"),
+                        new MigrationMetadata("000000000000001_Migration1")
+                            {
+                                TargetModel = new Metadata.Model()
+                            },
+                        new MigrationMetadata("000000000000002_Migration2")
+                            {
+                                TargetModel = new Metadata.Model()
+                            },
                         new MigrationMetadata("000000000000003_Migration3")
                             {
                                 TargetModel = new Metadata.Model(),
@@ -401,8 +428,14 @@ namespace Microsoft.Data.Entity.Migrations.Tests.Infrastructure
                     },
                 new[]
                     {
-                        new MigrationMetadata("000000000000001_Migration1"),
-                        new MigrationMetadata("000000000000002_Migration2"),
+                        new MigrationMetadata("000000000000001_Migration1")
+                            {
+                                TargetModel = new Metadata.Model()
+                            },
+                        new MigrationMetadata("000000000000002_Migration2")
+                            {
+                                TargetModel = new Metadata.Model()
+                            },
                         new MigrationMetadata("000000000000003_Migration3")
                             {
                                 TargetModel = new Metadata.Model(),
@@ -437,8 +470,14 @@ namespace Microsoft.Data.Entity.Migrations.Tests.Infrastructure
                     },
                 new[]
                     {
-                        new MigrationMetadata("000000000000001_Migration1"),
-                        new MigrationMetadata("000000000000002_Migration2"),
+                        new MigrationMetadata("000000000000001_Migration1")
+                            {
+                                TargetModel = new Metadata.Model()
+                            },
+                        new MigrationMetadata("000000000000002_Migration2")
+                            {
+                                TargetModel = new Metadata.Model()
+                            },
                         new MigrationMetadata("000000000000003_Migration3")
                             {
                                 TargetModel = new Metadata.Model(),
@@ -521,7 +560,7 @@ namespace Microsoft.Data.Entity.Migrations.Tests.Infrastructure
 
             var sqlGeneratorFactory = new Mock<IMigrationOperationSqlGeneratorFactory>();
 
-            sqlGeneratorFactory.Setup(mosgf => mosgf.Create(It.IsAny<DatabaseModel>()))
+            sqlGeneratorFactory.Setup(mosgf => mosgf.Create(It.IsAny<DatabaseModel>(), It.IsAny<DatabaseModel>()))
                 .Returns(sqlGenerator.Object);
 
             var migrator
@@ -582,7 +621,7 @@ namespace Microsoft.Data.Entity.Migrations.Tests.Infrastructure
 
             var sqlGeneratorFactory = new Mock<IMigrationOperationSqlGeneratorFactory>();
 
-            sqlGeneratorFactory.Setup(mosgf => mosgf.Create(It.IsAny<DatabaseModel>()))
+            sqlGeneratorFactory.Setup(mosgf => mosgf.Create(It.IsAny<DatabaseModel>(), It.IsAny<DatabaseModel>()))
                 .Returns(sqlGenerator.Object);
 
             var migrator
@@ -764,7 +803,7 @@ namespace Microsoft.Data.Entity.Migrations.Tests.Infrastructure
         {
             var mock = new Mock<IMigrationOperationSqlGeneratorFactory>();
 
-            mock.Setup(mosgf => mosgf.Create(It.IsAny<DatabaseModel>()))
+            mock.Setup(mosgf => mosgf.Create(It.IsAny<DatabaseModel>(), It.IsAny<DatabaseModel>()))
                 .Returns(MockMigrationOperationSqlGenerator().Object);
 
             return mock;

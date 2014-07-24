@@ -7,6 +7,7 @@ using JetBrains.Annotations;
 using Microsoft.Data.Entity.Metadata;
 using Microsoft.Data.Entity.Migrations;
 using Microsoft.Data.Entity.Relational;
+using Microsoft.Data.Entity.Relational.Model;
 using Microsoft.Data.Entity.SQLite.Utilities;
 using Microsoft.Data.SQLite;
 
@@ -58,7 +59,8 @@ namespace Microsoft.Data.Entity.SQLite
             Check.NotNull(model, "model");
 
             // TODO: SQLiteMigrationOperationSqlGenerator should get this from DI
-            _generator.Database = _modelDiffer.DatabaseBuilder.GetDatabase(model);
+            _generator.SourceDatabase = new DatabaseModel();
+            _generator.TargetDatabase = _modelDiffer.DatabaseBuilder.GetDatabase(model);
             var operations = _modelDiffer.CreateSchema(model);
             var statements = _generator.Generate(operations);
 

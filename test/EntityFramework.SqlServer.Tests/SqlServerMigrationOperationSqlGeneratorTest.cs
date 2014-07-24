@@ -415,8 +415,8 @@ EXECUTE('ALTER TABLE [dbo].[MyTable] DROP CONSTRAINT ""' + @var0 + '""')",
 
         private static string GenerateDataType(Column column)
         {
-            var sqlGenerator = new SqlServerMigrationOperationSqlGenerator(new SqlServerTypeMapper()) { Database = new DatabaseModel() };
-            sqlGenerator.Database.AddTable(column.Table);
+            var sqlGenerator = new SqlServerMigrationOperationSqlGenerator(new SqlServerTypeMapper()) { TargetDatabase = new DatabaseModel() };
+            sqlGenerator.TargetDatabase.AddTable(column.Table);
             return sqlGenerator.GenerateDataType(column.Table.Name, column);
         }
 

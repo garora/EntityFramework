@@ -109,6 +109,7 @@ namespace Microsoft.Data.Entity.Design
             }
             else
             {
+                sourceModel = new Model();
                 upgradeOperations = ModelDiffer.CreateSchema(targetModel);
                 downgradeOperations = ModelDiffer.DropSchema(targetModel);
             }
