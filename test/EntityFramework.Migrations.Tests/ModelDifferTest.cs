@@ -180,7 +180,7 @@ namespace Microsoft.Data.Entity.Migrations.Tests
             var sourceModel = CreateModel();
             var targetModel = CreateModel();
 
-            targetModel.GetEntityType("Dependent").GetProperty("Id").SetColumnName("NewId");
+            targetModel.GetEntityType("Dependent").GetProperty("MyProperty").SetColumnName("MyNewColumn");
 
             var operations = new ModelDiffer(new DatabaseBuilder()).Diff(sourceModel, targetModel);
 
@@ -190,8 +190,8 @@ namespace Microsoft.Data.Entity.Migrations.Tests
             var renameColumnOperation = (RenameColumnOperation)operations[0];
 
             Assert.Equal("dbo.MyTable0", renameColumnOperation.TableName);
-            Assert.Equal("Id", renameColumnOperation.ColumnName);
-            Assert.Equal("NewId", renameColumnOperation.NewColumnName);
+            Assert.Equal("MyColumn", renameColumnOperation.ColumnName);
+            Assert.Equal("MyNewColumn", renameColumnOperation.NewColumnName);
         }
 
         [Fact]
@@ -301,94 +301,6 @@ namespace Microsoft.Data.Entity.Migrations.Tests
             Assert.Equal("dbo.MyTable0", alterColumnOperation.TableName);
             Assert.Equal("MyColumn", alterColumnOperation.NewColumn.Name);
             Assert.Equal("nvarchar(10)", alterColumnOperation.NewColumn.DataType);
-        }
-
-        [Fact]
-        public void Diff_finds_added_default_constraint_with_value()
-        {
-            var sourceModel = CreateModel();
-            var targetModel = CreateModel();
-
-            var property = targetModel.GetEntityType("Dependent").GetProperty("MyProperty");
-            property.Annotations.Add(new Annotation(
-                MetadataExtensions.Annotations.ColumnDefaultValue, "MyDefaultValue"));
-
-            var operations = new ModelDiffer(new DatabaseBuilder()).Diff(sourceModel, targetModel);
-
-            Assert.Equal(1, operations.Count);
-            Assert.IsType<AddDefaultConstraintOperation>(operations[0]);
-
-            var addDefaultConstraintOperation = (AddDefaultConstraintOperation)operations[0];
-
-            Assert.Equal("dbo.MyTable0", addDefaultConstraintOperation.TableName);
-            Assert.Equal("MyColumn", addDefaultConstraintOperation.ColumnName);
-            Assert.Equal("MyDefaultValue", addDefaultConstraintOperation.DefaultValue);
-            Assert.Null(addDefaultConstraintOperation.DefaultSql);
-        }
-
-        [Fact]
-        public void Diff_finds_added_default_constraint_with_sql()
-        {
-            var sourceModel = CreateModel();
-            var targetModel = CreateModel();
-
-            var property = targetModel.GetEntityType("Dependent").GetProperty("MyProperty");
-            property.Annotations.Add(new Annotation(
-                MetadataExtensions.Annotations.ColumnDefaultSql, "MyDefaultSql"));
-
-            var operations = new ModelDiffer(new DatabaseBuilder()).Diff(sourceModel, targetModel);
-
-            Assert.Equal(1, operations.Count);
-            Assert.IsType<AddDefaultConstraintOperation>(operations[0]);
-
-            var addDefaultConstraintOperation = (AddDefaultConstraintOperation)operations[0];
-
-            Assert.Equal("dbo.MyTable0", addDefaultConstraintOperation.TableName);
-            Assert.Equal("MyColumn", addDefaultConstraintOperation.ColumnName);
-            Assert.Null(addDefaultConstraintOperation.DefaultValue);
-            Assert.Equal("MyDefaultSql", addDefaultConstraintOperation.DefaultSql);
-        }
-
-        [Fact]
-        public void Diff_finds_dropped_default_constraint_with_value()
-        {
-            var sourceModel = CreateModel();
-            var targetModel = CreateModel();
-
-            var property = sourceModel.GetEntityType("Dependent").GetProperty("MyProperty");
-            property.Annotations.Add(new Annotation(
-                MetadataExtensions.Annotations.ColumnDefaultValue, "MyDefaultValue"));
-
-            var operations = new ModelDiffer(new DatabaseBuilder()).Diff(sourceModel, targetModel);
-
-            Assert.Equal(1, operations.Count);
-            Assert.IsType<DropDefaultConstraintOperation>(operations[0]);
-
-            var dropDefaultConstraintOperation = (DropDefaultConstraintOperation)operations[0];
-
-            Assert.Equal("dbo.MyTable0", dropDefaultConstraintOperation.TableName);
-            Assert.Equal("MyColumn", dropDefaultConstraintOperation.ColumnName);
-        }
-
-        [Fact]
-        public void Diff_finds_dropped_default_constraint_with_sql()
-        {
-            var sourceModel = CreateModel();
-            var targetModel = CreateModel();
-
-            var property = sourceModel.GetEntityType("Dependent").GetProperty("MyProperty");
-            property.Annotations.Add(new Annotation(
-                MetadataExtensions.Annotations.ColumnDefaultSql, "MyDefaultSql"));
-
-            var operations = new ModelDiffer(new DatabaseBuilder()).Diff(sourceModel, targetModel);
-
-            Assert.Equal(1, operations.Count);
-            Assert.IsType<DropDefaultConstraintOperation>(operations[0]);
-
-            var dropDefaultConstraintOperation = (DropDefaultConstraintOperation)operations[0];
-
-            Assert.Equal("dbo.MyTable0", dropDefaultConstraintOperation.TableName);
-            Assert.Equal("MyColumn", dropDefaultConstraintOperation.ColumnName);
         }
 
         [Fact]
@@ -1046,49 +958,6 @@ namespace Microsoft.Data.Entity.Migrations.Tests
             Assert.False(addPrimaryKeyOperation.IsClustered);
         }
 
-        [Fact]
-        public void Primary_keys_are_not_matched_if_different_column_types()
-        {
-            var sourceModelBuilder = new ModelBuilder();
-            sourceModelBuilder
-                .Entity("A")
-                .Properties(
-                    ps =>
-                    {
-                        ps.Property<int>("Id");
-                        ps.Property<string>("P1").ColumnType("varchar");
-                    })
-                .Key("Id", "P1");
-
-            var targetModelBuilder = new ModelBuilder();
-            targetModelBuilder
-                .Entity("A")
-                .Properties(
-                    ps =>
-                    {
-                        ps.Property<int>("Id");
-                        ps.Property<string>("P1").ColumnType("nvarchar");
-                    })
-                .Key("Id", "P1");
-
-            var operations = new ModelDiffer(new DatabaseBuilder()).Diff(
-                sourceModelBuilder.Model, targetModelBuilder.Model);
-
-            Assert.Equal(3, operations.Count);
-
-            Assert.IsType<DropPrimaryKeyOperation>(operations[0]);
-            Assert.IsType<AlterColumnOperation>(operations[1]);
-            Assert.IsType<AddPrimaryKeyOperation>(operations[2]);
-
-            var dropPrimaryKeyOperation = (DropPrimaryKeyOperation)operations[0];
-            var alterColumnOperation = (AlterColumnOperation)operations[1];
-            var addPrimaryKeyOperation = (AddPrimaryKeyOperation)operations[2];
-
-            Assert.Equal("PK_A", dropPrimaryKeyOperation.PrimaryKeyName);
-            Assert.Equal("nvarchar", alterColumnOperation.NewColumn.DataType);
-            Assert.Equal("PK_A", addPrimaryKeyOperation.PrimaryKeyName);
-        }
-
         #endregion
 
         #region Index matching
@@ -1348,51 +1217,6 @@ namespace Microsoft.Data.Entity.Migrations.Tests
             Assert.Equal("IX_A_P1", dropIndexOperation.IndexName);
             Assert.Equal("IX_A_P1", createIndexOperation.IndexName);
             Assert.True(createIndexOperation.IsClustered);
-        }
-
-        [Fact]
-        public void Indexes_are_not_matched_if_different_column_types()
-        {
-            var sourceModelBuilder = new ModelBuilder();
-            sourceModelBuilder
-                .Entity("A")
-                .Properties(
-                    ps =>
-                    {
-                        ps.Property<int>("Id");
-                        ps.Property<string>("P1").ColumnType("varchar");
-                    })
-                .Key("Id")
-                .Indexes(ixs => ixs.Index("P1"));
-
-            var targetModelBuilder = new ModelBuilder();
-            targetModelBuilder
-                .Entity("A")
-                .Properties(
-                    ps =>
-                    {
-                        ps.Property<int>("Id");
-                        ps.Property<string>("P1").ColumnType("nvarchar");
-                    })
-                .Key("Id")
-                .Indexes(ixs => ixs.Index("P1"));
-
-            var operations = new ModelDiffer(new DatabaseBuilder()).Diff(
-                sourceModelBuilder.Model, targetModelBuilder.Model);
-
-            Assert.Equal(3, operations.Count);
-
-            Assert.IsType<DropIndexOperation>(operations[0]);
-            Assert.IsType<AlterColumnOperation>(operations[1]);
-            Assert.IsType<CreateIndexOperation>(operations[2]);
-
-            var dropIndexOperation = (DropIndexOperation)operations[0];
-            var alterColumnOperation = (AlterColumnOperation)operations[1];
-            var createIndexOperation = (CreateIndexOperation)operations[2];
-
-            Assert.Equal("IX_A_P1", dropIndexOperation.IndexName);
-            Assert.Equal("nvarchar", alterColumnOperation.NewColumn.DataType);
-            Assert.Equal("IX_A_P1", createIndexOperation.IndexName);
         }
 
         #endregion

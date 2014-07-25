@@ -130,7 +130,6 @@ namespace Microsoft.Data.Entity.Migrations
                 ((IEnumerable<MigrationOperation>)_operations.Get<DropIndexOperation>())
                     .Concat(_operations.Get<DropForeignKeyOperation>())
                     .Concat(_operations.Get<DropPrimaryKeyOperation>())
-                    .Concat(_operations.Get<DropDefaultConstraintOperation>())
                     .Concat(_operations.Get<DropColumnOperation>())
                     .Concat(_operations.Get<DropTableOperation>())
                     .Concat(_operations.Get<MoveTableOperation>())
@@ -178,8 +177,6 @@ namespace Microsoft.Data.Entity.Migrations
                 FindAddedColumns(tablePair, columnPairs);
                 FindDroppedColumns(tablePair, columnPairs);
                 FindAlteredColumns(columnPairs);
-                FindAddedDefaultConstraints(columnPairs);
-                FindDroppedDefaultConstraints(columnPairs);
 
                 var foreignKeyPairs = FindForeignKeyPairs(FindForeignKeyPairs(entityTypePair));
 
@@ -466,36 +463,6 @@ namespace Microsoft.Data.Entity.Migrations
             // TODO: Add functionality to determine the value of isDestructiveChange.
         }
 
-        private void FindAddedDefaultConstraints(
-            IEnumerable<Tuple<Column, Column>> columnPairs)
-        {
-            _operations.AddRange(
-                columnPairs
-                    .Where(pair =>
-                        pair.Item2.HasDefault
-                        && !MatchColumnDefaults(pair.Item1, pair.Item2))
-                    .Select(pair =>
-                        new AddDefaultConstraintOperation(
-                            pair.Item2.Table.Name,
-                            pair.Item2.Name,
-                            pair.Item2.DefaultValue,
-                            pair.Item2.DefaultSql)));
-        }
-
-        private void FindDroppedDefaultConstraints(
-            IEnumerable<Tuple<Column, Column>> columnPairs)
-        {
-            _operations.AddRange(
-                columnPairs
-                    .Where(pair =>
-                        pair.Item1.HasDefault
-                        && !MatchColumnDefaults(pair.Item1, pair.Item2))
-                    .Select(pair =>
-                        new DropDefaultConstraintOperation(
-                            pair.Item1.Table.Name,
-                            pair.Item1.Name)));
-        }
-
         private IReadOnlyList<Tuple<IKey, IKey>> FindPrimaryKeyPairs(
             IEnumerable<Tuple<IEntityType, IEntityType>> entityTypePairs)
         {
@@ -748,12 +715,25 @@ namespace Microsoft.Data.Entity.Migrations
                 && MatchProperties(x.Properties, y.Properties);
         }
 
+        protected virtual bool SimpleMatchColumns(Column x, Column y)
+        {
+            return string.Equals(x.Name, y.Name, StringComparison.Ordinal);
+        }
+
+        protected virtual bool SimpleMatchColumns(IReadOnlyList<Column> x, IReadOnlyList<Column> y)
+        {
+            return
+                x.Count == y.Count
+                && !x.Where((t, i) => !SimpleMatchColumns(t, y[i])).Any();
+        }
+
         protected virtual bool MatchColumns(Column x, Column y)
         {
-            // Column defaults are covered separately.
             return
                 x.ClrType == y.ClrType
                 && string.Equals(x.DataType, y.DataType, StringComparison.Ordinal)
+                && x.DefaultValue == y.DefaultValue
+                && string.Equals(x.DefaultSql, y.DefaultSql, StringComparison.Ordinal)
                 && x.IsNullable == y.IsNullable
                 && x.ValueGenerationStrategy == y.ValueGenerationStrategy
                 && x.IsTimestamp == y.IsTimestamp
@@ -764,26 +744,12 @@ namespace Microsoft.Data.Entity.Migrations
                 && x.IsUnicode == y.IsUnicode;
         }
 
-        protected virtual bool MatchColumns(IReadOnlyList<Column> x, IReadOnlyList<Column> y)
-        {
-            return
-                x.Count == y.Count
-                && !x.Where((t, i) => !MatchColumns(t, y[i])).Any();            
-        }
-
-        protected virtual bool MatchColumnDefaults(Column sourceColumn, Column targetColumn)
-        {
-            return
-                sourceColumn.DefaultValue == targetColumn.DefaultValue
-                && string.Equals(sourceColumn.DefaultSql, targetColumn.DefaultSql, StringComparison.Ordinal);
-        }
-
         protected virtual bool MatchPrimaryKeys(PrimaryKey x, PrimaryKey y)
         {
             return
                 string.Equals(x.Name, y.Name, StringComparison.Ordinal)
                 && x.IsClustered == y.IsClustered
-                && MatchColumns(x.Columns, y.Columns);
+                && SimpleMatchColumns(x.Columns, y.Columns);
         }
 
         protected virtual bool MatchForeignKeys(ForeignKey x, ForeignKey y)
@@ -791,15 +757,15 @@ namespace Microsoft.Data.Entity.Migrations
             return
                 string.Equals(x.Name, y.Name, StringComparison.Ordinal)
                 && x.CascadeDelete == y.CascadeDelete
-                && MatchColumns(x.Columns, y.Columns)
-                && MatchColumns(x.ReferencedColumns, y.ReferencedColumns);
+                && SimpleMatchColumns(x.Columns, y.Columns)
+                && SimpleMatchColumns(x.ReferencedColumns, y.ReferencedColumns);
         }
 
         protected virtual bool MatchIndexes(Index x, Index y)
         {
             return
-                x.IsClustered == y.IsClustered                
-                && MatchColumns(x.Columns, y.Columns);
+                x.IsClustered == y.IsClustered
+                && SimpleMatchColumns(x.Columns, y.Columns);
         }
 
         private class MigrationOperationCollection
