@@ -57,6 +57,7 @@
     <Compile Include="Infrastructure\ModelSnapshot.cs" />
     <Compile Include="Migration.cs" />
     <Compile Include="MigrationCodeGenerator.cs" />
+    <Compile Include="MigrationOperationCollection.cs" />
     <Compile Include="MigrationOperationSqlGenerator.cs" />
     <Compile Include="ModelCodeGenerator.cs" />
     <Compile Include="ModelDiffer.cs" />
